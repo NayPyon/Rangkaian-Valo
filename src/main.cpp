@@ -64,10 +64,13 @@ void setup() {
   }
   Serial.println("\n[SUKSES] WiFi Terhubung!");
   
-  espClient.setInsecure(); // Bypass cek sertifikat SSL untuk simulasi
+  espClient.setInsecure(); 
+  
+  // ---> TAMBAHKAN BARIS INI UNTUK MEMPERBESAR NAFAS MESIN <---
+  client.setBufferSize(512); 
   
   client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback); // Memanggil fungsi callback di atas
+  client.setCallback(callback); 
 }
 
 // 4. FUNGSI LOOP
