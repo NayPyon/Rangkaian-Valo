@@ -1,65 +1,59 @@
-const express = require('express');
-const cors = require('cors');
-
-// 1. Cara BARU memanggil Firebase Admin (Sistem Modular)
+const mqtt = require('mqtt'); // <--- BARIS INI YANG HILANG
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-
-// 2. Memanggil Kunci VIP Firebase
 const serviceAccount = require('./serviceAccountKey.json');
 
-// 3. Menghidupkan akses Firebase Admin
-initializeApp({
-  credential: cert(serviceAccount)
+// 2. Koneksi ke HiveMQ Cloud milikmu
+const brokerUrl = 'mqtts://b35e18dea1b94479a14baa6c480eeb3d.s1.eu.hivemq.cloud:8883';
+
+const options = {
+  username: 'VALO', // Ganti dengan username dari Access Management
+  password: 'Nayaka_ingram190206'  // Ganti dengan password dari Access Management
+};
+
+const client = mqtt.connect(brokerUrl, options);
+
+// ... (Bagian subscribe dan logika Firebase tetap sama) ...
+
+// 3. Nama "Grup Obrolan" (Topik)
+// Aku tambahkan namamu biar datanya tidak nyasar dengan orang lain di public broker
+const TOPIC_SCAN = 'ecopoint/nayaka/scan';
+const TOPIC_STATUS = 'ecopoint/nayaka/status';
+
+client.on('connect', () => {
+  console.log(`🚀 [MQTT] Terhubung ke HiveMQ Broker!`);
+  // Berlangganan ke topik scan dari ESP32
+  client.subscribe(TOPIC_SCAN, (err) => {
+    if (!err) console.log(`📡 [MQTT] Siaga mendengarkan topik: ${TOPIC_SCAN}`);
+  });
 });
 
-const db = getFirestore();
-const app = express();
+// 4. Kalau ada pesan masuk dari ESP32
+client.on('message', async (topic, message) => {
+  if (topic === TOPIC_SCAN) {
+    const qrCode = message.toString().trim();
+    console.log(`\n[SERVER] Menerima QR Code dari mesin: ${qrCode}`);
 
-// 4. Menyiapkan Middleware (agar bisa menerima data JSON dari ESP32)
-app.use(cors());
-app.use(express.json());
+    try {
+      const sesiRef = db.collection('Sesi_Aktif');
+      const snapshot = await sesiRef.where('qr_code', '==', qrCode).get();
 
-// 5. Membuat Rute API (Endpoint) untuk menerima lemparan dari mesin
-app.post('/api/verify-qr', async (req, res) => {
-  try {
-    const { qrCode } = req.body;
-    
-    console.log(`\n[SERVER] Menerima permintaan verifikasi QR: ${qrCode}`);
+      if (snapshot.empty) {
+        console.log(`[SERVER] ❌ Kode ${qrCode} TIDAK VALID.`);
+        // Kirim perintah GAGAL ke mesin
+        client.publish(TOPIC_STATUS, JSON.stringify({ status: 'gagal' }));
+        return;
+      }
 
-    // Mengecek apakah kode ini ada di koleksi "Sesi_Aktif"
-    const sesiRef = db.collection('Sesi_Aktif');
-    const snapshot = await sesiRef.where('qr_code', '==', qrCode).get();
+      let userId = '';
+      snapshot.forEach(doc => { userId = doc.id; });
+      console.log(`[SERVER] ✅ Kode VALID! Milik pengguna: ${userId}`);
+      
+      // Kirim perintah BUKA PINTU ke mesin
+      client.publish(TOPIC_STATUS, JSON.stringify({ status: 'sukses', user: userId }));
 
-    if (snapshot.empty) {
-      console.log(`[SERVER] ❌ Kode ${qrCode} TIDAK VALID atau sudah kedaluwarsa.`);
-      return res.status(404).json({ success: false, message: 'QR Code tidak valid!' });
+    } catch (error) {
+      console.error('[SERVER] Firebase Error:', error);
     }
-
-    // Kalau kodenya ketemu
-    let userId = '';
-    snapshot.forEach(doc => {
-      userId = doc.id; // Mendapatkan ID dokumen (biasanya nama/ID pengguna)
-    });
-
-    console.log(`[SERVER] ✅ Kode VALID! Milik pengguna: ${userId}`);
-
-    // --- NANTI LOGIKA INJECT POIN & RIWAYAT KITA TARUH DI SINI ---
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'Kode berhasil diverifikasi!',
-      user: userId
-    });
-
-  } catch (error) {
-    console.error('[SERVER] Terjadi kesalahan:', error);
-    res.status(500).json({ success: false, message: 'Server Error' });
   }
-});
-
-// 6. Menyalakan Server di Port 3000
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Satpam EcoPoint Backend menyala di http://localhost:${PORT}`);
 });
