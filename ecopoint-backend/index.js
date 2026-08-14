@@ -1,7 +1,17 @@
-const mqtt = require('mqtt'); // <--- BARIS INI YANG HILANG
+const mqtt = require('mqtt');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const serviceAccount = require('./serviceAccountKey.json');
+
+// --- Inisialisasi Firebase ---
+initializeApp({
+  credential: cert(serviceAccount)
+});
+
+// ---> INI DIA BARIS YANG HILANG! <---
+// Kita harus memberitahu Node.js bahwa 'db' adalah penghubung ke Firestore
+const db = getFirestore(); 
+// -------------------------------------
 
 // 2. Koneksi ke HiveMQ Cloud milikmu
 const brokerUrl = 'mqtts://b35e18dea1b94479a14baa6c480eeb3d.s1.eu.hivemq.cloud:8883';
