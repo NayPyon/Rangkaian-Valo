@@ -9,11 +9,21 @@
       "top": 0,
       "left": 0,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo1",
+      "top": -50,
+      "left": 150,
+      "attrs": {}
     }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ]
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:GND.1", "servo1:GND", "black", [] ],
+    [ "esp:3V3", "servo1:V+", "red", [] ],
+    [ "esp:18", "servo1:PWM", "orange", [] ]
   ],
   "dependencies": {}
 }

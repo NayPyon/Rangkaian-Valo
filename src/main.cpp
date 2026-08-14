@@ -1,7 +1,10 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include <ESP32Servo.h>
 
+Servo pintuServo;
+const int servoPin = 18;
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
@@ -23,14 +26,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
   
   Serial.println("\n[MQTT] Balasan dari Server: " + message);
   
-  // Mengecek apakah pesannya mengandung kata "sukses"
+  // LOGIKA PINTU BARU
   if (message.indexOf("sukses") > 0) {
-    Serial.println("[MESIN] ✅ Verifikasi Berhasil! MEMBUKA PINTU SERVO...");
-  } else {
+    Serial.println("[MESIN] ✅ VALID! Pintu Terbuka 90 Derajat...");
+    pintuServo.write(90); // Menggerakkan lengan servo ke atas
+  } 
+  else if (message.indexOf("tutup") > 0) {
+    Serial.println("[MESIN] 🚪 Sesi Selesai. Menutup pintu...");
+    pintuServo.write(0);  // Mengembalikan pintu ke posisi tertutup
+  }
+  else {
     Serial.println("[MESIN] ❌ Verifikasi Gagal! Pintu tetap tertutup.");
   }
-  Serial.println("------------------------------------------");
-  Serial.println("Silakan ketik kode QR selanjutnya...");
 }
 
 // 2. FUNGSI RECONNECT
@@ -57,10 +64,12 @@ void reconnect() {
 // 3. FUNGSI SETUP
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(100);
   
-  // VITAMIN 1: Mencegah mesin melamun kelamaan saat membaca ketikanmu
-  Serial.setTimeout(100); 
-
+  // Inisialisasi Servo
+  pintuServo.attach(servoPin);
+  pintuServo.write(0); // Pastikan pintu terkunci saat mesin baru nyala
+  
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
