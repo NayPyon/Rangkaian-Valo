@@ -57,6 +57,10 @@ void reconnect() {
 // 3. FUNGSI SETUP
 void setup() {
   Serial.begin(115200);
+  
+  // VITAMIN 1: Mencegah mesin melamun kelamaan saat membaca ketikanmu
+  Serial.setTimeout(100); 
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -66,9 +70,12 @@ void setup() {
   
   espClient.setInsecure(); 
   
-  // ---> TAMBAHKAN BARIS INI UNTUK MEMPERBESAR NAFAS MESIN <---
-  client.setBufferSize(512); 
+  // VITAMIN 2: Memperbesar kapasitas paru-paru mesin ke angka maksimal
+  client.setBufferSize(1024); 
   
+  // VITAMIN 3: Meminta kelonggaran waktu ke HiveMQ (60 detik) agar tidak gampang di-kick
+  client.setKeepAlive(60); 
+
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback); 
 }
