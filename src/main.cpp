@@ -72,15 +72,18 @@ void setup() {
 
 // 4. FUNGSI LOOP
 void loop() {
+  // Menjaga koneksi MQTT
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
+  // Membaca ketikan tanpa harus menunggu \n
   if (Serial.available() > 0) {
-    String qrCode = Serial.readStringUntil('\n');
-    qrCode.trim();
+    String qrCode = Serial.readString(); // <-- Diubah di sini
+    qrCode.trim(); // Membersihkan spasi dan enter gaib
     
+    // Kalau benar-benar ada teks yang masuk, baru proses
     if (qrCode.length() > 0) {
       Serial.println("\n[SCANNER] Kode terbaca: " + qrCode);
       Serial.println("[MESIN] Mengirim ke topik: ecopoint/nayaka/scan...");
