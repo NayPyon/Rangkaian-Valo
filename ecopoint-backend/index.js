@@ -40,28 +40,31 @@ client.on('connect', () => {
 
 // 4. Kalau ada pesan masuk dari ESP32
 client.on('message', async (topic, message) => {
-  if (topic === TOPIC_SCAN) {
+  if (topic === 'ecopoint/nayaka/scan') {
     const qrCode = message.toString().trim();
-    console.log(`\n[SERVER] Menerima QR Code dari mesin: ${qrCode}`);
+    console.log(`[SERVER] Menerima QR Code dari mesin: ${qrCode}`);
 
     try {
+      // 1. Mencarinya berdasarkan field 'kode_sesi', BUKAN nama dokumen
       const sesiRef = db.collection('Sesi_Aktif');
-      const snapshot = await sesiRef.where('qr_code', '==', qrCode).get();
+      const snapshot = await sesiRef.where('kode_sesi', '==', qrCode).get();
 
+      // 2. Mengecek apakah ada dokumen yang cocok
       if (snapshot.empty) {
         console.log(`[SERVER] ❌ Kode ${qrCode} TIDAK VALID.`);
-        // Kirim perintah GAGAL ke mesin
-        client.publish(TOPIC_STATUS, JSON.stringify({ status: 'gagal' }));
-        return;
+        // Perintahkan ESP32 untuk menolak
+        client.publish('ecopoint/nayaka/status', JSON.stringify({status: 'gagal'}));
+      } else {
+        console.log(`[SERVER] ✅ Kode ${qrCode} VALID! MEMBUKA PINTU...`);
+        // Perintahkan ESP32 untuk membuka servo
+        client.publish('ecopoint/nayaka/status', JSON.stringify({status: 'sukses'}));
+        
+        // (Opsional & Sangat Disarankan) 
+        // Ubah status di Firebase agar kode ini tidak bisa dipakai 2x
+        snapshot.forEach(doc => {
+          doc.ref.update({ status: 'berhasil_digunakan' });
+        });
       }
-
-      let userId = '';
-      snapshot.forEach(doc => { userId = doc.id; });
-      console.log(`[SERVER] ✅ Kode VALID! Milik pengguna: ${userId}`);
-      
-      // Kirim perintah BUKA PINTU ke mesin
-      client.publish(TOPIC_STATUS, JSON.stringify({ status: 'sukses', user: userId }));
-
     } catch (error) {
       console.error('[SERVER] Firebase Error:', error);
     }
