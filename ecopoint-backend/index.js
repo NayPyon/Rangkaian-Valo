@@ -1,6 +1,6 @@
 const mqtt = require('mqtt');
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const serviceAccount = require('./serviceAccountKey.json');
 
 // --- Inisialisasi Firebase ---
@@ -20,16 +20,20 @@ const client = mqtt.connect(brokerUrl, options);
 // 3. Nama Topik
 const TOPIC_SCAN = 'ecopoint/nayaka/scan';
 const TOPIC_STATUS = 'ecopoint/nayaka/status';
+const TOPIC_SENSOR = 'ecopoint/nayaka/sensor'; // <--- Topik Sensor
 
 client.on('connect', () => {
   console.log(`🚀 [MQTT] Terhubung ke HiveMQ Broker!`);
-  client.subscribe(TOPIC_SCAN, (err) => {
-    if (!err) console.log(`📡 [MQTT] Siaga mendengarkan topik: ${TOPIC_SCAN}`);
+  // Subscribe ke 2 topik sekaligus (Scan QR dan Sensor Sampah)
+  client.subscribe([TOPIC_SCAN, TOPIC_SENSOR], (err) => {
+    if (!err) console.log(`📡 [MQTT] Siaga mendengarkan scan & sensor!`);
   });
 });
 
 // 4. Kalau ada pesan masuk dari ESP32
 client.on('message', async (topic, message) => {
+  
+  // --- LOGIKA 1: JIKA MENERIMA SCAN QR ---
   if (topic === TOPIC_SCAN) {
     const qrCode = message.toString().trim();
     console.log(`[SERVER] Menerima QR Code dari mesin: ${qrCode}`);
@@ -45,7 +49,6 @@ client.on('message', async (topic, message) => {
         console.log(`[SERVER] ✅ Kode ${qrCode} VALID! MEMBUKA PINTU...`);
         client.publish(TOPIC_STATUS, JSON.stringify({status: 'sukses'}));
         
-        // ---> PERUBAHAN 1: Update status untuk memicu UI HP berubah
         snapshot.forEach(doc => {
           doc.ref.update({ 
             status: 'pintu_terbuka',
@@ -56,6 +59,24 @@ client.on('message', async (topic, message) => {
       }
     } catch (error) {
       console.error('[SERVER] Firebase Error:', error);
+    }
+  }
+
+  // ---> INI DIA YANG BARU: LOGIKA 2 JIKA TOMBOL DITEKAN <---
+  if (topic === TOPIC_SENSOR) {
+    const aksi = message.toString().trim();
+    if (aksi === 'sampah_masuk') {
+      console.log(`[SERVER] ♻️ Menerima laporan: 1 Botol masuk! Menambah poin...`);
+      
+      try {
+        // Otomatis tambah 1 botol dan 500 poin langsung di database!
+        db.collection('Sesi_Aktif').doc('Nayaka').update({
+          botol: FieldValue.increment(1),
+          poin: FieldValue.increment(500)
+        });
+      } catch (error) {
+        console.error('[SERVER] Gagal menambah poin:', error);
+      }
     }
   }
 });
