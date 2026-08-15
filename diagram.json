@@ -13,19 +13,26 @@
     {
       "type": "wokwi-servo",
       "id": "servo1",
-      "top": -50,
-      "left": 150,
+      "top": -80,
+      "left": 250,
       "attrs": {}
     },
     {
       "type": "wokwi-pushbutton",
       "id": "btn1",
-      "top": 50,
+      "top": 60,
       "left": 250,
       "attrs": { 
         "color": "green",
         "label": "Sensor Sampah" 
       }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": 180, 
+      "left": 250, 
+      "attrs": {}
     }
   ],
   "connections": [
@@ -35,7 +42,11 @@
     [ "esp:3V3", "servo1:V+", "red", [] ],
     [ "esp:18", "servo1:PWM", "orange", [] ],
     [ "esp:19", "btn1:1.l", "green", [] ],
-    [ "esp:GND.2", "btn1:2.l", "black", [] ]
+    [ "esp:GND.2", "btn1:2.l", "black", [] ],
+    [ "esp:21", "oled1:SDA", "green", [] ],
+    [ "esp:22", "oled1:SCL", "blue", [] ],
+    [ "esp:3V3", "oled1:VCC", "red", [] ],
+    [ "esp:GND.1", "oled1:GND", "black", [] ]
   ],
   "dependencies": {}
 }
