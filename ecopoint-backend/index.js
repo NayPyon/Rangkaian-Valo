@@ -75,14 +75,52 @@ client.on('message', async (topic, message) => {
   }
 });
 
-// --- MATA-MATA SELESAI SESI ---
-db.collection('Sesi_Aktif').doc('Nayaka').onSnapshot(docSnapshot => {
+// --- MATA-MATA SELESAI SESI (VERSUS BANK POIN) ---
+db.collection('Sesi_Aktif').doc('Nayaka').onSnapshot(async (docSnapshot) => {
   if (docSnapshot.exists) {
     const data = docSnapshot.data();
+    
+    // Jika user menekan tombol 'Akhiri Sesi'
     if (data.status === 'selesai') {
-      console.log("\n[SERVER] 🛑 Sesi selesai. Menutup pintu!");
-      client.publish(TOPIC_STATUS, JSON.stringify({status: 'tutup'}));
-      docSnapshot.ref.update({ status: 'menunggu_mesin' });
+      console.log("\n[SERVER] 🛑 Sesi selesai. Memproses Bank Poin...");
+
+      const plastik = data.botol_plastik || 0;
+      const logam = data.botol_logam || 0;
+      const poinSesiIni = (plastik * 100) + (logam * 300);
+
+      try {
+        // 1. UPDATE DOMPET UTAMA (BANK)
+        const userRef = db.collection('Users').doc('Nayaka');
+        await userRef.set({
+          total_poin: FieldValue.increment(poinSesiIni),
+          total_plastik: FieldValue.increment(plastik),
+          total_logam: FieldValue.increment(logam)
+        }, { merge: true });
+
+        // 2. CATAT KE BUKU RIWAYAT
+        await db.collection('Riwayat').add({
+          user: 'Nayaka',
+          plastik: plastik,
+          logam: logam,
+          poin: poinSesiIni,
+          tanggal: FieldValue.serverTimestamp()
+        });
+
+        console.log(`[SERVER] ✅ Berhasil menabung ${poinSesiIni} poin!`);
+
+        // 3. RESET SESI & TUTUP PINTU
+        client.publish(TOPIC_STATUS, JSON.stringify({status: 'tutup'}));
+        
+        docSnapshot.ref.update({ 
+          status: 'menunggu_mesin',
+          botol_plastik: 0,
+          botol_logam: 0,
+          sampah_reject: 0
+        });
+
+      } catch (error) {
+        console.error('[SERVER] Gagal menabung poin:', error);
+      }
     }
   }
 });
