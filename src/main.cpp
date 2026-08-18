@@ -6,7 +6,6 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// --- KONFIGURASI LAYAR OLED ---
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -16,12 +15,18 @@ const int servoPin = 18;
 const char* ssid = "Wokwi-GUEST";
 const char* password = "";
 
-const int buttonPin = 19;
-bool isPintuTerbuka = false; 
-bool lastButtonState = HIGH;
-int botolMasuk = 0; // Penghitung lokal untuk tampilan layar
+// PIN UNTUK 3 TOMBOL
+const int btnPlastik = 19;
+const int btnLogam = 4;
+const int btnReject = 5;
 
-// Konfigurasi HiveMQ Cloud
+bool lastPlastik = HIGH;
+bool lastLogam = HIGH;
+bool lastReject = HIGH;
+
+bool isPintuTerbuka = false; 
+int countPlastik = 0, countLogam = 0, countReject = 0;
+
 const char* mqtt_server = "b35e18dea1b94479a14baa6c480eeb3d.s1.eu.hivemq.cloud";
 const int mqtt_port = 8883;
 const char* mqtt_user = "VALO"; 
@@ -30,7 +35,6 @@ const char* mqtt_pass = "Nayaka_ingram190206";
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
-// --- FUNGSI PEMBARUAN LAYAR ---
 void tampilkanLayar(String baris1, String baris2, int ukuran = 1) {
   display.clearDisplay();
   display.setTextSize(ukuran);
@@ -43,76 +47,66 @@ void tampilkanLayar(String baris1, String baris2, int ukuran = 1) {
   display.display();
 }
 
-// 1. FUNGSI CALLBACK (Diperbarui dengan Layar)
+// LAYAR KHUSUS DASBOR SAMPAH
+void tampilkanDasborSampah() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 5);
+  display.println("  RINCIAN MASUK");
+  display.println("---------------------");
+  display.print(" Plastik : "); display.println(countPlastik);
+  display.print(" Logam   : "); display.println(countLogam);
+  display.print(" Reject  : "); display.println(countReject);
+  display.display();
+}
+
 void callback(char* topic, byte* payload, unsigned int length) {
   String message = "";
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  
-  Serial.println("\n[MQTT] Balasan: " + message);
+  for (int i = 0; i < length; i++) message += (char)payload[i];
   
   if (message.indexOf("sukses") > 0) {
-    Serial.println("[MESIN] ✅ VALID! Pintu Terbuka...");
     pintuServo.write(90); 
     isPintuTerbuka = true; 
-    botolMasuk = 0; // Reset hitungan di mesin
-    tampilkanLayar("PINTU TERBUKA", "Silakan masukkan\nsampah Anda.");
+    countPlastik = 0; countLogam = 0; countReject = 0; // Reset
+    tampilkanDasborSampah();
   } 
   else if (message.indexOf("tutup") > 0) {
-    Serial.println("[MESIN] 🚪 Menutup pintu...");
     pintuServo.write(0);  
     isPintuTerbuka = false; 
-    tampilkanLayar("SESI SELESAI", "Terima kasih!\nSampah: " + String(botolMasuk));
-    delay(3000); // Tahan tulisan terima kasih 3 detik
-    tampilkanLayar("ECOPOINT RVM", "Siap digunakan.\nScan QR Code Anda.");
-  }
-  else {
-    Serial.println("[MESIN] ❌ Verifikasi Gagal!");
-    tampilkanLayar("AKSES DITOLAK", "Kode QR tidak valid\natau sudah usang.");
-    delay(2000);
-    tampilkanLayar("ECOPOINT RVM", "Siap digunakan.\nScan QR Code Anda.");
+    tampilkanLayar("SESI SELESAI", "Terima Kasih!");
+    delay(3000); 
+    tampilkanLayar("ECOPOINT RVM", "Scan QR Code Anda.");
   }
 }
 
-// 2. FUNGSI RECONNECT
 void reconnect() {
   while (!client.connected()) {
-    tampilkanLayar("MENYAMBUNG...", "Menghubungi Server\nHiveMQ...");
-    Serial.print("Menyambungkan ke MQTT...");
-    
-    String clientId = "MesinEcoPoint_";
-    clientId += String(random(0, 0xffff), HEX);
-    
+    tampilkanLayar("MENYAMBUNG...", "Ke Server MQTT...");
+    String clientId = "MesinEco_" + String(random(0, 0xffff), HEX);
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
-      Serial.println(" TERHUBUNG!");
       client.subscribe("ecopoint/nayaka/status");
-      tampilkanLayar("ECOPOINT RVM", "Siap digunakan.\nScan QR Code Anda.");
+      tampilkanLayar("ECOPOINT RVM", "Scan QR Code Anda.");
     } else {
       delay(5000);
     }
   }
 }
 
-// 3. FUNGSI SETUP
 void setup() {
   Serial.begin(115200);
-  pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(btnPlastik, INPUT_PULLUP);
+  pinMode(btnLogam, INPUT_PULLUP);
+  pinMode(btnReject, INPUT_PULLUP);
   
-  // Inisialisasi Layar OLED
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("OLED gagal dimuat"));
-    for(;;);
-  }
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   tampilkanLayar("STARTING...", "Memulai Sistem...");
-
+  
   pintuServo.attach(servoPin);
   pintuServo.write(0); 
   
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
+  while (WiFi.status() != WL_CONNECTED) delay(500);
   
   espClient.setInsecure(); 
   client.setBufferSize(1024); 
@@ -121,35 +115,48 @@ void setup() {
   client.setCallback(callback); 
 }
 
-// 4. FUNGSI LOOP
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
+  if (!client.connected()) reconnect();
   client.loop();
 
-  // --- LOGIKA SENSOR SAMPAH ---
   if (isPintuTerbuka) {
-    bool currentButtonState = digitalRead(buttonPin);
-    
-    if (lastButtonState == HIGH && currentButtonState == LOW) {
-      Serial.println("[MESIN] ♻️ Sampah terdeteksi!");
-      botolMasuk++; // Tambah angka di layar
-      tampilkanLayar("MENGHITUNG...", "Botol Masuk: " + String(botolMasuk));
-      
-      client.publish("ecopoint/nayaka/sensor", "sampah_masuk");
-      delay(300); 
+    // CEK TOMBOL PLASTIK
+    bool currPlastik = digitalRead(btnPlastik);
+    if (lastPlastik == HIGH && currPlastik == LOW) {
+      countPlastik++;
+      tampilkanDasborSampah();
+      client.publish("ecopoint/nayaka/sensor", "plastik_masuk");
+      delay(300);
     }
-    lastButtonState = currentButtonState;
+    lastPlastik = currPlastik;
+
+    // CEK TOMBOL LOGAM
+    bool currLogam = digitalRead(btnLogam);
+    if (lastLogam == HIGH && currLogam == LOW) {
+      countLogam++;
+      tampilkanDasborSampah();
+      client.publish("ecopoint/nayaka/sensor", "logam_masuk");
+      delay(300);
+    }
+    lastLogam = currLogam;
+
+    // CEK TOMBOL REJECT
+    bool currReject = digitalRead(btnReject);
+    if (lastReject == HIGH && currReject == LOW) {
+      countReject++;
+      tampilkanDasborSampah();
+      client.publish("ecopoint/nayaka/sensor", "reject_masuk");
+      delay(300);
+    }
+    lastReject = currReject;
   }
 
-  // --- LOGIKA SCANNER QR ---
+  // SCANNER QR
   if (Serial.available()) {
     String qrCode = Serial.readString();
     qrCode.trim();
-    
     if (qrCode.length() > 0) {
-      tampilkanLayar("MEMPROSES...", "Mengecek kode QR\nke awan...");
+      tampilkanLayar("MEMPROSES...", "Validasi QR Code...");
       client.publish("ecopoint/nayaka/scan", qrCode.c_str());
     }
   }

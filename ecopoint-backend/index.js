@@ -3,13 +3,9 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const serviceAccount = require('./serviceAccountKey.json');
 
-// --- Inisialisasi Firebase ---
-initializeApp({
-  credential: cert(serviceAccount)
-});
+initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore(); 
 
-// 2. Koneksi ke HiveMQ Cloud milikmu
 const brokerUrl = 'mqtts://b35e18dea1b94479a14baa6c480eeb3d.s1.eu.hivemq.cloud:8883';
 const options = {
   username: 'VALO', 
@@ -17,27 +13,21 @@ const options = {
 };
 const client = mqtt.connect(brokerUrl, options);
 
-// 3. Nama Topik
 const TOPIC_SCAN = 'ecopoint/nayaka/scan';
 const TOPIC_STATUS = 'ecopoint/nayaka/status';
-const TOPIC_SENSOR = 'ecopoint/nayaka/sensor'; // <--- Topik Sensor
+const TOPIC_SENSOR = 'ecopoint/nayaka/sensor'; 
 
 client.on('connect', () => {
   console.log(`🚀 [MQTT] Terhubung ke HiveMQ Broker!`);
-  // Subscribe ke 2 topik sekaligus (Scan QR dan Sensor Sampah)
   client.subscribe([TOPIC_SCAN, TOPIC_SENSOR], (err) => {
     if (!err) console.log(`📡 [MQTT] Siaga mendengarkan scan & sensor!`);
   });
 });
 
-// 4. Kalau ada pesan masuk dari ESP32
 client.on('message', async (topic, message) => {
-  
-  // --- LOGIKA 1: JIKA MENERIMA SCAN QR ---
+  // --- LOGIKA 1: SCAN QR ---
   if (topic === TOPIC_SCAN) {
     const qrCode = message.toString().trim();
-    console.log(`[SERVER] Menerima QR Code dari mesin: ${qrCode}`);
-
     try {
       const sesiRef = db.collection('Sesi_Aktif');
       const snapshot = await sesiRef.where('kode_sesi', '==', qrCode).get();
@@ -46,14 +36,15 @@ client.on('message', async (topic, message) => {
         console.log(`[SERVER] ❌ Kode ${qrCode} TIDAK VALID.`);
         client.publish(TOPIC_STATUS, JSON.stringify({status: 'gagal'}));
       } else {
-        console.log(`[SERVER] ✅ Kode ${qrCode} VALID! MEMBUKA PINTU...`);
+        console.log(`[SERVER] ✅ Kode ${qrCode} VALID!`);
         client.publish(TOPIC_STATUS, JSON.stringify({status: 'sukses'}));
         
         snapshot.forEach(doc => {
           doc.ref.update({ 
             status: 'pintu_terbuka',
-            botol: 0,
-            poin: 0
+            botol_plastik: 0,
+            botol_logam: 0,
+            sampah_reject: 0
           });
         });
       }
@@ -62,40 +53,35 @@ client.on('message', async (topic, message) => {
     }
   }
 
-  // ---> INI DIA YANG BARU: LOGIKA 2 JIKA TOMBOL DITEKAN <---
+  // --- LOGIKA 2: SAMPAH MASUK ---
   if (topic === TOPIC_SENSOR) {
     const aksi = message.toString().trim();
-    if (aksi === 'sampah_masuk') {
-      console.log(`[SERVER] ♻️ Menerima laporan: 1 Botol masuk! Menambah poin...`);
-      
-      try {
-        // Otomatis tambah 1 botol dan 500 poin langsung di database!
-        db.collection('Sesi_Aktif').doc('Nayaka').update({
-          botol: FieldValue.increment(1),
-          poin: FieldValue.increment(500)
-        });
-      } catch (error) {
-        console.error('[SERVER] Gagal menambah poin:', error);
+    const docRef = db.collection('Sesi_Aktif').doc('Nayaka');
+
+    try {
+      if (aksi === 'plastik_masuk') {
+        console.log(`[SERVER] 🍾 Plastik masuk! Menambah ke database...`);
+        docRef.update({ botol_plastik: FieldValue.increment(1) });
+      } else if (aksi === 'logam_masuk') {
+        console.log(`[SERVER] 🥫 Logam masuk! Menambah ke database...`);
+        docRef.update({ botol_logam: FieldValue.increment(1) });
+      } else if (aksi === 'reject_masuk') {
+        console.log(`[SERVER] ❌ Sampah Ditolak!`);
+        docRef.update({ sampah_reject: FieldValue.increment(1) });
       }
+    } catch (error) {
+      console.error('[SERVER] Gagal update poin:', error);
     }
   }
 });
 
-// ---> PERUBAHAN 2: Mata-mata untuk memantau tombol Selesai dari HP
-const sesiAktifRef = db.collection('Sesi_Aktif').doc('Nayaka');
-
-sesiAktifRef.onSnapshot(docSnapshot => {
+// --- MATA-MATA SELESAI SESI ---
+db.collection('Sesi_Aktif').doc('Nayaka').onSnapshot(docSnapshot => {
   if (docSnapshot.exists) {
     const data = docSnapshot.data();
-    
-    // Jika HP mengubah status menjadi selesai
     if (data.status === 'selesai') {
-      console.log("\n[SERVER] 🛑 User menekan Selesai. Memerintahkan pintu ditutup!");
-      
-      // Mengirim perintah tutup ke ESP32
+      console.log("\n[SERVER] 🛑 Sesi selesai. Menutup pintu!");
       client.publish(TOPIC_STATUS, JSON.stringify({status: 'tutup'}));
-      
-      // Mengembalikan status menjadi diam (agar tidak memicu loop)
       docSnapshot.ref.update({ status: 'menunggu_mesin' });
     }
   }

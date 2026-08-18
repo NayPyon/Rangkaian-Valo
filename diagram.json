@@ -19,19 +19,30 @@
     },
     {
       "type": "wokwi-pushbutton",
-      "id": "btn1",
-      "top": 60,
+      "id": "btnPlastik",
+      "top": 10,
       "left": 250,
-      "attrs": { 
-        "color": "green",
-        "label": "Sensor Sampah" 
-      }
+      "attrs": { "color": "green", "label": "Plastik" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnLogam",
+      "top": 70,
+      "left": 250,
+      "attrs": { "color": "blue", "label": "Logam" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnReject",
+      "top": 130,
+      "left": 250,
+      "attrs": { "color": "red", "label": "Reject" }
     },
     {
       "type": "board-ssd1306",
       "id": "oled1",
-      "top": 180, 
-      "left": 250, 
+      "top": 200, 
+      "left": 350, 
       "attrs": {}
     }
   ],
@@ -41,8 +52,12 @@
     [ "esp:GND.1", "servo1:GND", "black", [] ],
     [ "esp:3V3", "servo1:V+", "red", [] ],
     [ "esp:18", "servo1:PWM", "orange", [] ],
-    [ "esp:19", "btn1:1.l", "green", [] ],
-    [ "esp:GND.2", "btn1:2.l", "black", [] ],
+    [ "esp:19", "btnPlastik:1.l", "green", [] ],
+    [ "esp:GND.2", "btnPlastik:2.l", "black", [] ],
+    [ "esp:4", "btnLogam:1.l", "blue", [] ],
+    [ "esp:GND.2", "btnLogam:2.l", "black", [] ],
+    [ "esp:5", "btnReject:1.l", "red", [] ],
+    [ "esp:GND.2", "btnReject:2.l", "black", [] ],
     [ "esp:21", "oled1:SDA", "green", [] ],
     [ "esp:22", "oled1:SCL", "blue", [] ],
     [ "esp:3V3", "oled1:VCC", "red", [] ],
